@@ -30,7 +30,12 @@ function storeData(d, reply) {
   console.log(row)
   return db.insert(row).into("packets").then(function (id) {
     console.log(id[0], d.event, d.data);
-  }).then(() => reply({}).code(200));
+  })
+  .then(() => reply({}).code(200))
+  .catch((err) => {
+    console.log(err)
+    return reply(err + '').code(500)
+  })
 }
 
 server.route({
