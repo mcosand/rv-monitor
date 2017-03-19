@@ -22,7 +22,7 @@ const int SLEEP_PERIOD = 30;
 // LONG
 const int MOTION_DEBOUNCE_SECONDS = 60 * 30;
 const int SENSORS_INTERVAL_SECONDS = 60 * 60 * 8;
-const int SLEEP_PERIOD = 60;
+const int SLEEP_PERIOD = 30;
 
 const float BATTERY_DIVIDER = 29.0/*ohms*/ / (29.0/*ohms*/ + 148.9/*ohms*/);
 const float BATTERY_SCALAR = 3.3/*volts*/ / 4095 /*bits*/ / BATTERY_DIVIDER;
@@ -38,6 +38,7 @@ const int EARLY_TIME = 0;
 const int EARLY_TIME = 1000000000;
 #endif
 
+PMIC _pmic;
 RHT03 rht;
 int lastTime;
 int lastSensors;
@@ -49,6 +50,8 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 // setup() runs once, when the device is first turned on.
 void setup() {
   int i;
+
+  _pmic.disableCharging();
 
   pinMode(MOTION_SIGNAL_PIN, INPUT_PULLUP);
   pinMode(LED_PIN, OUTPUT);
@@ -72,6 +75,8 @@ void setup() {
     digitalWrite(LED_PIN, 0);
     delay(600);
   }
+
+  doSensors();
 }
 
 void log(String s) {
@@ -111,8 +116,12 @@ void doSensors() {
 		float latestTempF = rht.tempF();
     int batteryBits = analogRead(BATTERY_PIN);
     float latestBatt = batteryBits * BATTERY_SCALAR;
+
+    CellularSignal sig = Cellular.RSSI();
+    int strength = map(sig.rssi, -131, -51, 0, 9);
+
 		// Now print the values:
-    send("s", String(latestBatt, 2) +"," + String(latestTempF, 1) + "," + String(latestHumidity, 1));
+    send("s", String(strength) + String(latestBatt, 2) +"," + String(latestTempF, 1) + "," + String(latestHumidity, 1));
 	}
 }
 
