@@ -19,20 +19,38 @@ server.route({
     return reply('hello world');
   }
 });
+
+function storeData(d) {
+  var row = {
+    type: d.name,
+    data: d.data,
+    raw: JSON.stringify(d),
+    published: new Date(d.published)
+  }
+  return db.insert(row).into("packets").then(function (id) {
+    console.log(id[0], d.name, d.data);
+  }).then(() => reply({}).code(200));
+}
+
 server.route({
   method: 'POST',
   path:'/particle',
   handler: function(request, reply) {
-    const d = request.payload
-    var row = {
-      type: d.name,
-      data: d.data,
-      raw: JSON.stringify(d),
-      published: new Date(d.published)
-    }
-    return db.insert(row).into("packets").then(function (id) {
-      console.log(id[0], d.name, d.data);
-    }).then(() => reply({}).code(200));
+    return storeData(request.payload)
+  }
+})
+server.route({
+  method: 'PUT',
+  path: '/particle',
+  handler: function(request, reply) {
+    return storeData(request.payload);
+  }
+})
+server.route({
+  method: 'GET',
+  path:'/particle',
+  handler: function(request, reply) {
+    return storeData(request.url.query)
   }
 })
 
