@@ -20,7 +20,7 @@ server.route({
   }
 });
 
-function storeData(d) {
+function storeData(d, reply) {
   var row = {
     type: d.name,
     data: d.data,
@@ -36,21 +36,21 @@ server.route({
   method: 'POST',
   path:'/particle',
   handler: function(request, reply) {
-    return storeData(request.payload)
+    return storeData(request.payload, reply)
   }
 })
 server.route({
   method: 'PUT',
   path: '/particle',
   handler: function(request, reply) {
-    return storeData(request.payload);
+    return storeData(request.payload, reply);
   }
 })
 server.route({
   method: 'GET',
   path:'/particle',
   handler: function(request, reply) {
-    return storeData(request.url.query)
+    return storeData(request.url.query, reply)
   }
 })
 
