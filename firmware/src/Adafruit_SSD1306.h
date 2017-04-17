@@ -18,6 +18,8 @@ BSD license, check license.txt for more information
 All text above, and the splash screen must be included in any redistribution
 *********************************************************************/
 
+#ifndef __adafruit_ssd1306_h__
+#define __adafruit_ssd1306_h__
 
 #include "application.h"
 #include "Adafruit_GFX.h"
@@ -143,3 +145,4 @@ class Adafruit_SSD1306 : public Adafruit_GFX {
   inline void drawFastHLineInternal(int16_t x, int16_t y, int16_t w, uint16_t color) __attribute__((always_inline));
 
 };
+#endif

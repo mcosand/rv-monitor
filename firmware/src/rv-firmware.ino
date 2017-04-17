@@ -5,6 +5,7 @@
  */
 #include "SparkFunRHT03/SparkFunRHT03.h"
 #include "Adafruit_SSD1306.h"
+#include "pages.h"
 
 const float BATTERY_DIVIDER = 29.0/*ohms*/ / (29.0/*ohms*/ + 148.9/*ohms*/);
 const float BATTERY_SCALAR = 3.3/*volts*/ / 4095 /*bits*/ / BATTERY_DIVIDER;
@@ -48,6 +49,13 @@ int next_sleep;
 
 unsigned long last_button_down[NUM_BUTTONS];
 
+Page power_page(NULL, drawPower);
+Page tanks_page(&power_page, drawTanks);
+Page env_page(&tanks_page, drawEnvironment);
+String menu_names[] = { "abc", "def" };
+SettingsPage settings_page(&env_page, &lcd, menu_names, 2);
+Page* current_screen = &power_page;
+
 /*
 String logMsg = NULL;
 unsigned long last_motion = 0;
@@ -64,6 +72,8 @@ SYSTEM_MODE(SEMI_AUTOMATIC);
 const int SLEEP_PERIOD = 60 * 1;
 */
 void setup() {
+  power_page.SetPrevious(&settings_page);
+
   lcd.begin(SSD1306_SWITCHCAPVCC, LCD_ADDR);
   lcd.clearDisplay();
   _pmic.disableCharging();
@@ -98,16 +108,29 @@ void loop() {
   int action_delta = Time.now() - last_action;
 
   handleDisplayTimeout(action_delta);
-
+  handleButton();
+  if (lcd.isOn())
+  {
+    current_screen->Draw();
+    lcd.display();
+  }
+/*
+  if (active_button > 0)
+  {
+    //switch (current_screen) {
+    //  case 0:
+    //    if (active_button == 2) { current_screen = 1
+    //}
+    active_button = 0;
+  }
+*/
   if (Time.now() - RHT_SAMPLE_RATE > rht_updated)
   {
     if (rht.update() == 1) {
       rht_updated = Time.now();
-      drawEnvironment();
     }
   }
 
-  handleButton();
 /*
   if (logMsg != NULL) {
     log(logMsg);
@@ -142,6 +165,7 @@ void loop() {
 */
 }
 
+
 void handleDisplayTimeout(int since_last)
 {
   static int last_time;
@@ -160,9 +184,15 @@ void handleDisplayTimeout(int since_last)
   last_time = since_last;
 }
 
-void drawEnvironment() {
-  if (!lcd.isOn()) return;
+void drawPower() {
+  lcd.fillRect(0, 0, lcd.width(), 16, BLACK);
+  lcd.setTextColor(WHITE);
+  lcd.setTextSize(1);
+  lcd.setCursor(0,0);
+  lcd.print("Power");
+}
 
+void drawEnvironment() {
   lcd.fillRect(0, 16, lcd.width(), 16 * 2, BLACK);
   lcd.setTextColor(WHITE);
   lcd.setTextSize(1);
@@ -171,7 +201,6 @@ void drawEnvironment() {
   if (rht_updated == 0)
   {
     lcd.print("Please wait ...");
-    lcd.display();
     return;
   }
 
@@ -183,7 +212,14 @@ void drawEnvironment() {
   lcd.print(String(rht.tempF(), 0) + (char)247);
   lcd.setCursor(42,32);
   lcd.print(String(rht.humidity(), 0) + '%');
-  lcd.display();
+}
+
+void drawTanks() {
+  lcd.fillRect(0, 0, lcd.width(), 16, BLACK);
+  lcd.setTextColor(WHITE);
+  lcd.setTextSize(1);
+  lcd.setCursor(0,0);
+  lcd.print("Tanks");
 }
 
 void handleButton() {
@@ -193,7 +229,20 @@ void handleButton() {
     {
       last_button_down[i] = millis();
       last_action = Time.now();
+      Page* new_screen = &power_page;
+
+      if (last_action < next_sleep)
+      {
+        // the UI wasn't sleeping
+        new_screen = current_screen->HandleButton(i);
+      }
       next_sleep = last_action + ACTION_TO_SLEEP;
+
+      if (new_screen == NULL) new_screen = &power_page;
+      if (new_screen != current_screen) {
+        lcd.clearDisplay();
+        current_screen = new_screen;
+      }
     }
   }
 }
