@@ -24,7 +24,7 @@ server.route({
   method: 'GET',
   path: '/last',
   handler: function(request, reply) {
-    return reply(db('packets').orderBy('published', 'desc').limit(1))
+    return reply(db('packets').orderBy('published', 'desc').limit(5))
   }
 })
 
