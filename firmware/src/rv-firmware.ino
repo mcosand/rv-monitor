@@ -5,10 +5,23 @@
  */
 #include "SparkFunRHT03/SparkFunRHT03.h"
 #include "Adafruit_SSD1306.h"
+#include "Adafruit_ADS1015.h"
 #include "pages.h"
 
-const float BATTERY_DIVIDER = 29.0/*ohms*/ / (29.0/*ohms*/ + 148.9/*ohms*/);
+const float BATTERY_DIVIDER = 29.0/*Kohms*/ / (29.0/*Kohms*/ + 148.9/*Kohms*/);
 const float BATTERY_SCALAR = 3.3/*volts*/ / 4095 /*bits*/ / BATTERY_DIVIDER;
+
+// AmpsPerBit = Instant amperage per bit at ADC. (100A / 50mV) [shunt values] * (256mV / 32768 bits) [from datasheet at 16X gain] = 0.0156...
+// Bits to AmpHours = AmpsPerBit * BATTERY_SAMPLE_ms * (1s / 1000 ms) * (1min / 60s) * (1hr / 60min)
+// Find reciprocal so we can store a big int instead of small fraction
+
+// 50 mV   32768 bits            1             1000 ms   60 s    60 min     230400000 bits            1
+// ----- * ---------- * -------------------- * ------- * ----- * ------ =   -------------- * --------------------
+// 100 A     256 mV       BATTERY_SAMPLE ms      1 s     1 min    1 hr         1 A hr          BATTERY_SAMPLE ms
+#define BATTERY_SAMPLE_ms 500
+#define BATTERY_USABLE_CAPACITY_AH 100
+const unsigned int BATTERY_AMP_HOURS_TO_BITS = 230400000 / BATTERY_SAMPLE_ms;
+#define BATTERY_BITS_TO_AMPS 64
 
 // PINS
 #define I2C_SDA D0
@@ -19,6 +32,8 @@ const int BUTTON_PINS[NUM_BUTTONS] = {D2, D3, D4};
 #define LED_PIN D7
 
 #define RHT03_DATA_PIN C0
+
+#define BATTERY_VOLTS_PIN A5
 
 
 #define LCD_ADDR 0x3C
@@ -36,6 +51,13 @@ const int EARLY_TIME = 1000000000;
 PMIC _pmic;
 RHT03 rht;
 Adafruit_SSD1306 lcd(0);
+Adafruit_ADS1115 ads;
+uint16_t last_battery_draw = 0;
+float last_battery_volts = 0.0F;
+// assume battery starts out full
+double battery_capacity = BATTERY_USABLE_CAPACITY_AH * BATTERY_AMP_HOURS_TO_BITS;
+
+unsigned long last_battery_ms = 0;
 
 int rht_updated = 0;
 #define RHT_SAMPLE_RATE 5
@@ -56,21 +78,9 @@ String menu_names[] = { "abc", "def" };
 SettingsPage settings_page(&env_page, &lcd, menu_names, 2);
 Page* current_screen = &power_page;
 
-/*
-String logMsg = NULL;
-unsigned long last_motion = 0;
-unsigned long last_temp = 0;
-unsigned long stop_beeping = 0;
-*/
-
-
 SYSTEM_THREAD(ENABLED);
 SYSTEM_MODE(SEMI_AUTOMATIC);
 
-/*
-
-const int SLEEP_PERIOD = 60 * 1;
-*/
 void setup() {
   power_page.SetPrevious(&settings_page);
 
@@ -83,6 +93,9 @@ void setup() {
 
   rht.begin(RHT03_DATA_PIN);
 
+  ads.setGain(GAIN_SIXTEEN);
+  ads.begin();
+
   pinMode(LED_PIN, OUTPUT);
   digitalWrite(LED_PIN, 0);
 
@@ -90,7 +103,6 @@ void setup() {
     pinMode(BUTTON_PINS[i], INPUT_PULLDOWN);
     last_button_down[i] = 0;
   }
-  //attachInterrupt(BUTTON_PINS[2], handleButton, RISING);
 /*
   // Put initialization like pinMode and begin functions here.
 #ifndef NO_CELL
@@ -114,16 +126,7 @@ void loop() {
     current_screen->Draw();
     lcd.display();
   }
-/*
-  if (active_button > 0)
-  {
-    //switch (current_screen) {
-    //  case 0:
-    //    if (active_button == 2) { current_screen = 1
-    //}
-    active_button = 0;
-  }
-*/
+
   if (Time.now() - RHT_SAMPLE_RATE > rht_updated)
   {
     if (rht.update() == 1) {
@@ -131,38 +134,12 @@ void loop() {
     }
   }
 
-/*
-  if (logMsg != NULL) {
-    log(logMsg);
-    logMsg = NULL;
+  if (millis() - last_battery_ms > BATTERY_SAMPLE_ms) {
+    last_battery_draw = ads.readADC_Differential_0_1();
+    last_battery_volts = analogRead(BATTERY_VOLTS_PIN) * BATTERY_SCALAR;
+    battery_capacity += last_battery_draw;
+    last_battery_ms = millis();
   }
-  if (stop_beeping > 0 && millis() > stop_beeping) {
-    stop_beeping = 0;
-    digitalWrite(BUZZER_PIN, 0);
-  }
-  if (okToSleep())
-  {
-    unsigned long before = Time.now();
-    log("Sleeping");
-    System.sleep(WKP, RISING, SLEEP_PERIOD, SLEEP_NETWORK_STANDBY);
-    before = Time.now() - before;
-    for (int i=0;i<NUM_BUTTONS;i++) { last_button_down[i] = 0; }
-    log(String(before));
-    log(before < SLEEP_PERIOD ? "Wake up!" : "open one eye ...");
-  }
-  handleButton();
-  if (digitalRead(MOTION_PIN) && Time.now() - last_motion > MOTION_HIGH_TIME) {
-    last_motion = Time.now();
-    beep(200);
-    log("Motion!!");
-  }
-  if (Time.now() - last_temp > TEMP_MEASURE_INTERVAL) {
-    if (rht.update() == 1) {
-      log("Temp: " + String(rht.tempF(), 1) + "   Humidity: " + String(rht.humidity(), 1));
-      last_temp = Time.now();
-    }
-  }
-*/
 }
 
 
@@ -185,11 +162,15 @@ void handleDisplayTimeout(int since_last)
 }
 
 void drawPower() {
-  lcd.fillRect(0, 0, lcd.width(), 16, BLACK);
+  lcd.clearDisplay();
   lcd.setTextColor(WHITE);
   lcd.setTextSize(1);
   lcd.setCursor(0,0);
-  lcd.print("Power");
+  lcd.println("Power");
+  lcd.println("");
+  lcd.println("Volts: " + String(last_battery_volts, 2) + "V");
+  lcd.println("Draw:  " + String((float)last_battery_draw / (float)BATTERY_BITS_TO_AMPS, 3) + "A");
+  lcd.println(String(battery_capacity / BATTERY_AMP_HOURS_TO_BITS, 1) + "AH remaining");
 }
 
 void drawEnvironment() {

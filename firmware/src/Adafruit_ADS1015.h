@@ -18,13 +18,7 @@
 */
 /**************************************************************************/
 
-#if ARDUINO >= 100
- #include "Arduino.h"
-#else
- #include "WProgram.h"
-#endif
-
-#include <Wire.h>
+#include "application.h"
 
 /*=========================================================================
     I2C ADDRESS/BITS
@@ -79,7 +73,7 @@
     #define ADS1015_REG_CONFIG_MODE_CONTIN  (0x0000)  // Continuous conversion mode
     #define ADS1015_REG_CONFIG_MODE_SINGLE  (0x0100)  // Power-down single-shot mode (default)
 
-    #define ADS1015_REG_CONFIG_DR_MASK      (0x00E0)  
+    #define ADS1015_REG_CONFIG_DR_MASK      (0x00E0)
     #define ADS1015_REG_CONFIG_DR_128SPS    (0x0000)  // 128 samples per second
     #define ADS1015_REG_CONFIG_DR_250SPS    (0x0020)  // 250 samples per second
     #define ADS1015_REG_CONFIG_DR_490SPS    (0x0040)  // 490 samples per second
@@ -117,7 +111,7 @@ typedef enum
   GAIN_SIXTEEN      = ADS1015_REG_CONFIG_PGA_0_256V
 } adsGain_t;
 
-class Adafruit_ADS1015
+class Adafruit_ADS1115
 {
 protected:
    // Instance-specific properties
@@ -127,12 +121,12 @@ protected:
    adsGain_t m_gain;
 
  public:
-  Adafruit_ADS1015(uint8_t i2cAddress = ADS1015_ADDRESS);
+  Adafruit_ADS1115(uint8_t i2cAddress = ADS1015_ADDRESS);
   void begin(void);
   uint16_t  readADC_SingleEnded(uint8_t channel);
   int16_t   readADC_Differential_0_1(void);
-  int16_t   readADC_Differential_2_3(void);
-  void      startComparator_SingleEnded(uint8_t channel, int16_t threshold);
+  //int16_t   readADC_Differential_2_3(void);
+  //void      startComparator_SingleEnded(uint8_t channel, int16_t threshold);
   int16_t   getLastConversionResults();
   void      setGain(adsGain_t gain);
   adsGain_t getGain(void);
@@ -141,6 +135,7 @@ protected:
 };
 
 // Derive from ADS1105 & override construction to set properties
+/*
 class Adafruit_ADS1115 : public Adafruit_ADS1015
 {
  public:
@@ -148,3 +143,4 @@ class Adafruit_ADS1115 : public Adafruit_ADS1015
 
  private:
 };
+*/
