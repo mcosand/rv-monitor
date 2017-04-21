@@ -3,10 +3,14 @@
  * Description:
  * Author: Matt Cosand
  */
+
+ #define DEBUG
+
 #include "SparkFunRHT03/SparkFunRHT03.h"
 #include "Adafruit_SSD1306.h"
 #include "Adafruit_ADS1015.h"
 #include "pages.h"
+#include "buttons.h"
 
 const float BATTERY_DIVIDER = 29.0/*Kohms*/ / (29.0/*Kohms*/ + 148.9/*Kohms*/);
 const float BATTERY_SCALAR = 3.3/*volts*/ / 4095 /*bits*/ / BATTERY_DIVIDER;
@@ -52,14 +56,17 @@ PMIC _pmic;
 RHT03 rht;
 Adafruit_SSD1306 lcd(0);
 Adafruit_ADS1115 ads;
-uint16_t last_battery_draw = 0;
+int16_t last_battery_draw = 0;
 float last_battery_volts = 0.0F;
 // assume battery starts out full
 double battery_capacity = BATTERY_USABLE_CAPACITY_AH * BATTERY_AMP_HOURS_TO_BITS;
 
 unsigned long last_battery_ms = 0;
 
-int rht_updated = 0;
+unsigned long last_second = 0;
+unsigned long uptime = 0;
+
+unsigned int rht_updated = 0;
 #define RHT_SAMPLE_RATE 5
 #define SCREEN_DIM_TIME 30
 #define SCREEN_TIMEOUT 40
@@ -69,13 +76,20 @@ int rht_updated = 0;
 int last_action;
 int next_sleep;
 
+bool cell_enable = false;
+unsigned int cell_delay = 0x0fff;
+
 unsigned long last_button_down[NUM_BUTTONS];
 
 Page power_page(NULL, drawPower);
 Page tanks_page(&power_page, drawTanks);
 Page env_page(&tanks_page, drawEnvironment);
-String menu_names[] = { "abc", "def" };
-SettingsPage settings_page(&env_page, &lcd, menu_names, 2);
+MenuItem menu_actions[] = {
+  {"Set battery full", NULL, setBatteryFull},
+  {NULL, getCellMenuName, cellMenuAction},
+  {"Send Beacon", NULL, sendBeacon }
+};
+SettingsPage settings_page(&env_page, &lcd, menu_actions, 3);
 Page* current_screen = &power_page;
 
 SYSTEM_THREAD(ENABLED);
@@ -116,21 +130,29 @@ void setup() {
   next_sleep = Time.now() + ACTION_TO_SLEEP;
 }
 
+
+// ==============================================   LOOP   =====================
 void loop() {
-  int action_delta = Time.now() - last_action;
+  #ifdef DEBUG
+  static int loop_count = 0;
+  loop_count++;
+  #endif
+  unsigned int now = Time.now();
+  int action_delta = now - last_action;
 
   handleDisplayTimeout(action_delta);
   handleButton();
   if (lcd.isOn())
   {
     current_screen->Draw();
+    drawCell();
     lcd.display();
   }
 
-  if (Time.now() - RHT_SAMPLE_RATE > rht_updated)
+  if (now - RHT_SAMPLE_RATE > rht_updated)
   {
     if (rht.update() == 1) {
-      rht_updated = Time.now();
+      rht_updated = now;
     }
   }
 
@@ -140,8 +162,75 @@ void loop() {
     battery_capacity += last_battery_draw;
     last_battery_ms = millis();
   }
+
+  if (last_second != now) {
+    uptime++;
+    last_second = now;
+    cell_delay++;
+
+    log(getCellStrength() + "," + String(last_battery_volts, 2) + ","
+        + String((float)last_battery_draw / (float)BATTERY_BITS_TO_AMPS, 3) + ","
+        + String(battery_capacity, 0) + ","
+        + String(rht.tempF(), 1) + ","
+        + String(rht.humidity(), 1)
+        #ifdef DEBUG
+        + "," + String(loop_count)
+        #endif
+        );
+    #ifdef DEBUG
+    loop_count = 0;
+    #endif
+  }
+
+  handleCell();
 }
 
+
+// ===================================================  END LOOP  ==============
+
+String getCellStrength()
+{
+  return Cellular.ready() ? String(map(Cellular.RSSI().rssi, -131, -51, 0, 9)) : "_";
+}
+
+void sendBeacon()
+{
+  send("s", getCellStrength() + String(last_battery_volts, 2) +"," + String(rht.tempF(), 0) + "," + String(rht.humidity(), 0));
+}
+
+void drawCell() {
+  if (cell_enable)
+  {
+    String strength = getCellStrength();
+    lcd.fillRect(112, 0, 16, 8, BLACK);
+    lcd.setTextColor(WHITE);
+    lcd.setTextSize(1);
+    lcd.setCursor(112,0);
+    lcd.print(Particle.connected() ? 'P' : ' ');
+    lcd.print(strength == "_" ? "\x1f" : strength);
+  }
+}
+
+void handleCell()
+{
+  if (cell_enable)
+  {
+    if (!Particle.connected())
+    {
+      Particle.connect();
+    }
+
+    if (Time.hour() % 8 == 0 && cell_delay > 4 * 60 * 60)
+    {
+      sendBeacon();
+      cell_delay = 0;
+    }
+  }
+  else
+  {
+    Cellular.off();
+  }
+}
 
 void handleDisplayTimeout(int since_last)
 {
@@ -171,6 +260,10 @@ void drawPower() {
   lcd.println("Volts: " + String(last_battery_volts, 2) + "V");
   lcd.println("Draw:  " + String((float)last_battery_draw / (float)BATTERY_BITS_TO_AMPS, 3) + "A");
   lcd.println(String(battery_capacity / BATTERY_AMP_HOURS_TO_BITS, 1) + "AH remaining");
+#ifdef DEBUG
+  lcd.println("");
+  lcd.println("up " + String(uptime) + "  draw " + String(last_battery_draw));
+#endif
 }
 
 void drawEnvironment() {
@@ -212,15 +305,17 @@ void handleButton() {
       last_action = Time.now();
       Page* new_screen = &power_page;
 
-      if (last_action < next_sleep)
+      if (lcd.isOn())
       {
         // the UI wasn't sleeping
         new_screen = current_screen->HandleButton(i);
       }
       next_sleep = last_action + ACTION_TO_SLEEP;
+      log("Button press: " + String(i) + "  next sleep=" + String(next_sleep));
 
       if (new_screen == NULL) new_screen = &power_page;
       if (new_screen != current_screen) {
+        new_screen->setActive();
         lcd.clearDisplay();
         current_screen = new_screen;
       }
@@ -313,8 +408,19 @@ void doSensors() {
 }
 */
 
+String getCellMenuName() {
+  return cell_enable ? "Turn cell off" : "Turn cell on";
+}
 
+void cellMenuAction() {
+  cell_enable = !cell_enable;
+  log(cell_enable ? "Turned cell on" : "Turned cell off");
+}
 
+void setBatteryFull() {
+  battery_capacity = BATTERY_USABLE_CAPACITY_AH * BATTERY_AMP_HOURS_TO_BITS;
+  log("Set battery to full capacity: " + String(battery_capacity));
+}
 
 void log(String s) {
   Serial1.println(Time.format(Time.now(), TIME_FORMAT_ISO8601_FULL) + " " + s);
@@ -322,9 +428,9 @@ void log(String s) {
 
 void send(String msg, String data) {
   log("### " + msg + ": " + data + " ###");
-  if (Particle.connected()) {
-    Particle.publish(msg, data, PRIVATE, NO_ACK);
+  if (Particle.connected())
+  {
+    Particle.publish(msg, data, PRIVATE);
     Particle.process();
   }
-  delay(1000);
 }

@@ -1,5 +1,6 @@
 #include "application.h"
 #include "Adafruit_SSD1306.h"
+#include "buttons.h"
 #include "pages.h"
 
 // =================  Page  ====================
@@ -17,19 +18,26 @@ void Page::SetPrevious(Page* prev)
 
 void Page::Draw() { _draw(); }
 
+void Page::setActive() { }
+
 Page* Page::_onAction() { return this; }
 
 Page* Page::HandleButton(uint8_t button)
 {
-  return button == 0 ? _prev : button == 1 ? _next : _onAction();
+  return button == BUTTON_RED ? _prev : button == BUTTON_YELLOW ? _next : _onAction();
 }
 
 // =================  Settings Page  ====================
-SettingsPage::SettingsPage(Page* prev, Adafruit_SSD1306* lcd, String names[], uint8_t name_count)
+SettingsPage::SettingsPage(Page* prev, Adafruit_SSD1306* lcd, MenuItem actions[], uint8_t action_count)
     : Page(prev, NULL) {
   _lcd = lcd;
-  _names = names;
-  _name_count = name_count;
+  _actions = actions;
+  _action_count = action_count;
+}
+
+void SettingsPage::setActive()
+{
+  _cur = -1;
 }
 
 Page* SettingsPage::HandleButton(uint8_t button)
@@ -37,13 +45,14 @@ Page* SettingsPage::HandleButton(uint8_t button)
   _lcd->clearDisplay();
   if (_cur < 0) return Page::HandleButton(button);
   switch (button) {
-    case 0:
+    case BUTTON_RED:
       _cur = -1;
       break;
-    case 1:
-      _cur = (_cur + 1) % _name_count;
+    case BUTTON_YELLOW:
+      _cur = (_cur + 1) % _action_count;
       break;
-    case 2:
+    case BUTTON_GREEN:
+      if (_actions[_cur].action != NULL) _actions[_cur].action();
       _cur = -1;
       return NULL;
   }
@@ -55,17 +64,18 @@ Page* SettingsPage::_onAction() { _cur = 0; return this; }
 void SettingsPage::Draw()
 {
   _lcd->setTextColor(WHITE);
-  _lcd->setTextSize(2);
+  _lcd->setTextSize(1);
+  _lcd->setCursor(0,16);
   if (_cur < 0) {
-    _lcd->setCursor(0,16);
     _lcd->println("Enter for Settings");
     return;
   }
 
-  _lcd->setCursor(0,0);
-  String* s = _names;
-  for (int i=0;i<_name_count;i++)
+  MenuItem* s = _actions;
+  for (int i=0;i<_action_count;i++)
   {
-    _lcd->println((_cur == i ? ">" : " ") + *s++);
+    String name = (s->name != NULL ? s->name : s->getName());
+    _lcd->println((_cur == i ? "> " : "  ") + name);
+    s++;
   }
 }
