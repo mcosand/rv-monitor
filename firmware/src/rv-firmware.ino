@@ -22,10 +22,13 @@ const float BATTERY_SCALAR = 3.3/*volts*/ / 4095 /*bits*/ / BATTERY_DIVIDER;
 // 50 mV   32768 bits            1             1000 ms   60 s    60 min     230400000 bits            1
 // ----- * ---------- * -------------------- * ------- * ----- * ------ =   -------------- * --------------------
 // 100 A     256 mV       BATTERY_SAMPLE ms      1 s     1 min    1 hr         1 A hr          BATTERY_SAMPLE ms
+// Theory - 230400000
+// Adjusted - 234000000
+
 #define BATTERY_SAMPLE_ms 500
 #define BATTERY_USABLE_CAPACITY_AH 100
-const unsigned int BATTERY_AMP_HOURS_TO_BITS = 230400000 / BATTERY_SAMPLE_ms;
-#define BATTERY_BITS_TO_AMPS 64
+const unsigned int BATTERY_AMP_HOURS_TO_BITS = 234000000 / BATTERY_SAMPLE_ms;
+#define BATTERY_BITS_TO_AMPS 65
 
 // PINS
 #define I2C_SDA D0
@@ -220,7 +223,7 @@ void handleCell()
       Particle.connect();
     }
 
-    if (Time.hour() % 8 == 0 && cell_delay > 4 * 60 * 60)
+    if (Time.hour() % 8 == 7 && cell_delay > 61 * 60)
     {
       sendBeacon();
       cell_delay = 0;
