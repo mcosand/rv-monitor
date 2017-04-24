@@ -1,0 +1,159 @@
+<html>
+  <head>
+    <title>Cosand RV Monitor</title>
+  </head>
+  <body style="background-color:#222;">
+    <div id="batt" style="min-width: 400px; height: 400px; margin: 0 auto; padding:50px 0px"></div>
+    <div id="env" style="min-width: 400px; height: 400px; margin: 0 auto; padding:50px 0px"></div>
+    <script src="https://code.jquery.com/jquery-1.12.4.min.js" integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ=" crossorigin="anonymous"></script>
+    <script src="//code.highcharts.com/highcharts.js"></script>
+    <script src="//code.highcharts.com/themes/dark-unica.js"></script>
+    <script>
+function toDateSeries(m, j) {
+  for (var i=0;i<m.length;i++)
+     m[i][0] = new Date(m[i][0]);
+  return m;
+}
+
+function tform(data, j) {
+  return data.map(function(f) { return [f[0], f[1][j]]})
+}
+
+$(document).ready(function() {
+ $.ajax({
+    url: '/data',
+    type: 'GET',
+    dataType: "json",
+    success: function (data) {
+      Highcharts.setOptions({global: { useUTC: false }})
+Highcharts.chart('batt', {
+    chart: {
+        zoomType: 'line'
+    },
+    title: {
+        text: 'Battery Volts'
+    },
+    xAxis: [{
+       type: 'datetime',
+       dateTimeLabelFormats: { // don't display the dummy year
+            month: '%e. %b',
+            year: '%b',
+        },
+        labels: {
+                style: {
+                    fontSize:'18px'
+                }
+            }
+    }],
+    yAxis: [{ // Primary yAxis
+        labels: {
+            format: '{value}V',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+        title: {
+            text: 'Volts',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+    }],
+    plotOptions: {
+        line: {
+            dataLabels: {
+                enabled: true,
+                style: { 'fontSize': '16px'}
+            },
+        }
+    },
+    series: [{
+        name: 'Volts',
+        data: tform(data, 1),
+        tooltip: {
+            valueSuffix: 'A'
+        }
+    }]
+});
+
+
+Highcharts.chart('env', {
+    chart: {
+        zoomType: 'line'
+    },
+    title: {
+        text: 'Environment'
+    },
+    xAxis: [{
+       type: 'datetime',
+       dateTimeLabelFormats: { // don't display the dummy year
+            month: '%e. %b',
+            year: '%b',
+        },
+        labels: {
+                style: {
+                    fontSize:'18px'
+                }
+            }
+    }],
+    yAxis: [{ // Primary yAxis
+        labels: {
+            format: '{value}F',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+        title: {
+            text: 'Temperature',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+    },
+    { // Primary yAxis
+        labels: {
+            format: '{value}%',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+        title: {
+            text: 'Humidity',
+            style: {
+                color: Highcharts.getOptions().colors[2]
+            }
+        },
+        opposite: true
+    }],
+    plotOptions: {
+        line: {
+            dataLabels: {
+                enabled: true,
+                style: { 'fontSize': '16px'}
+            },
+        }
+    },
+    series: [{
+        name: 'Temperature',
+        data: tform(data, 2),
+        tooltip: {
+            valueSuffix: 'F'
+        }
+    },{
+        name: 'Humidity',
+        data: tform(data, 3),
+        tooltip: {
+            valueSuffix: '%'
+        }
+    }]
+});
+
+
+    }
+  });
+ });
+
+
+</script>
+  </body>
+</html>

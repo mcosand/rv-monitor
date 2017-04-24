@@ -11,14 +11,40 @@ server.connection({
   port: process.env.PORT || 5000 
 });
 
+server.register(require('vision'), (err) => {
+  server.views({
+    engines: {
+      html: require('handlebars')
+    },
+    relativeTo: __dirname,
+    path: 'templates'
+  });
+});
+
 // Add the route
 server.route({
   method: 'GET',
   path:'/',
   handler: function (request, reply) {
-    return reply('hello world');
+    return reply.view('index');
   }
 });
+
+function parseData(d) {
+  var results = [];
+  results.push(d[0] == '_' ? null : d[0]*1);
+  var ds = d.substr(1).split(',')
+  for (var i=0;i<ds.length;i++) results.push(ds[i]*1)
+  return results;
+}
+
+server.route({
+  method: 'GET',
+  path: '/data',
+  handler: function(request, reply) {
+    return reply(db('packets').where('type', 's').where('published', '>', 1492754661614).orderBy('published').map(d => [d.published, parseData(d.data)]))
+  }
+})
 
 server.route({
   method: 'GET',
