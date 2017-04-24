@@ -97,6 +97,7 @@ Highcharts.chart('env', {
             }
     }],
     yAxis: [{ // Primary yAxis
+      min: 0,
         labels: {
             format: '{value}F',
             style: {
@@ -110,7 +111,8 @@ Highcharts.chart('env', {
             }
         },
     },
-    { // Primary yAxis
+    {
+      min: 0, max: 100,
         labels: {
             format: '{value}%',
             style: {
@@ -142,6 +144,7 @@ Highcharts.chart('env', {
     },{
         name: 'Humidity',
         data: tform(data, 3),
+        yAxis: 1,
         tooltip: {
             valueSuffix: '%'
         }
